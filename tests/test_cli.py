@@ -6,7 +6,11 @@ import sys
 import unittest
 from pathlib import Path
 
-from dependency_visualizer.cli import EXIT_CONFIG_ERROR, EXIT_SUCCESS
+from dependency_visualizer.cli import (
+    EXIT_CONFIG_ERROR, EXIT_MAVEN_ERROR, EXIT_SUCCESS,
+)
+from dependency_visualizer.models import Artifact
+from http_repository import LocalRepository
 
 PROJECT = Path(__file__).resolve().parent.parent
 EXIT_ARGUMENT_ERROR = 2
@@ -24,15 +28,46 @@ class CliTests(unittest.TestCase):
         )
 
     def test_success(self):
-        """Вывести четыре строки ключ-значение без ошибок."""
-        result = self.invoke("--config", str(PROJECT / "examples/maven.xml"))
+        """Получить POM через HTTP и вывести прямую зависимость."""
+        with LocalRepository() as repository:
+            repository.put(Artifact("org.example", "demo", "1.0"), """
+                <dependencies><dependency>
+                    <groupId>org.example</groupId>
+                    <artifactId>library</artifactId>
+                    <version>2.0</version>
+                </dependency></dependencies>
+            """)
+            result = self.invoke("--config", str(repository.config()))
         self.assertEqual(result.returncode, EXIT_SUCCESS)
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout.splitlines(), [
-            "package=org.apache.commons:commons-lang3",
-            "repository=https://repo.maven.apache.org/maven2",
-            "test_mode=false", "version=3.14.0",
+            "org.example:library:2.0 [scope=compile, type=jar]",
         ])
+
+    def test_empty_dependencies(self):
+        """Сообщить об отсутствии зависимостей без ошибки."""
+        with LocalRepository() as repository:
+            repository.put(Artifact("org.example", "demo", "1.0"))
+            result = self.invoke("--config", str(repository.config()))
+        self.assertEqual(result.returncode, EXIT_SUCCESS)
+        self.assertEqual(
+            result.stdout.strip(), "Прямые зависимости не найдены."
+        )
+
+    def test_repository_error(self):
+        """Обработать HTTP 404 без traceback и частичного вывода."""
+        with LocalRepository() as repository:
+            result = self.invoke("--config", str(repository.config()))
+        self.assertEqual(result.returncode, EXIT_MAVEN_ERROR)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("HTTP 404", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
+
+    def test_test_mode(self):
+        """Явно сообщить, что работа с тестовым графом относится к этапу 3."""
+        result = self.invoke("--config", str(PROJECT / "examples/test.xml"))
+        self.assertEqual(result.returncode, EXIT_MAVEN_ERROR)
+        self.assertIn("этапу 3", result.stderr)
 
     def test_config_error(self):
         """Сообщить об ошибке в stderr без traceback и частичного вывода."""
