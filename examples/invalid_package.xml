@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<configuration>
+    <package>bad-package</package>
+    <repository>https://repo.maven.apache.org/maven2</repository>
+    <test_mode>false</test_mode>
+    <version>3.14.0</version>
+</configuration>

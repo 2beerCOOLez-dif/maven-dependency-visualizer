@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <package>A</package>
+    <repository>repository.txt</repository>
+    <test_mode>true</test_mode>
+    <version>1.0</version>
+</configuration>
