@@ -16,26 +16,36 @@
 | Этап | Содержание | Статус |
 | --- | --- | --- |
 | 1 | CLI, XML-конфигурация, проверка параметров, вывод ключ-значение | Реализован |
-| 2 | Получение прямых зависимостей заданной версии Maven-пакета | Запланирован |
+| 2 | Получение и вывод прямых зависимостей заданной версии Maven-пакета | Реализован |
 | 3 | Граф транзитивных зависимостей, итеративный DFS, циклы, тестовый режим | Запланирован |
 | 4 | Вывод обратных зависимостей | Запланирован |
 | 5 | Graphviz, изображение графа, примеры и сравнение результатов | Запланирован |
 
-В текущей версии доступны чтение и проверка настроек и их вывод.
-Сетевые запросы, получение зависимостей, обход графа и визуализация
-пока не выполняются. Используется исключительно стандартная библиотека.
- 
-```
+На этапе 1 реализованы чтение и проверка настроек и их вывод.
+На этапе 2 добавлены загрузка POM заданной версии Maven-пакета
+из указанного репозитория и вывод его прямых зависимостей.
+
+При обработке POM учитываются свойства `${...}`, родительские POM,
+dependencyManagement и импортированные BOM. Зависимости плагинов
+не включаются в результат. POM самих зависимостей не загружаются:
+транзитивный обход пока не выполняется.
+
+Используется исключительно стандартная библиотека Python.
+Построение графа и визуализация пока не реализованы.
 
 ## Запуск и тесты
 
-Из корня проекта:
+Для работы необходим Python 3.10 или новее.
+Установка сторонних библиотек и сборка проекта не требуются.
+Команды выполняются из корня проекта.
+
+На Linux или macOS:
 
 ```sh
 sh run.sh --help
 sh run.sh --config examples/maven.xml
-sh run.sh --config examples/test.xml
-PYTHONPATH=src python3 -m unittest discover -s tests -v
+sh run.sh --config examples/junit.xml
+python3 run_tests.py
 ```
 
 Прямой запуск модуля:
@@ -44,13 +54,34 @@ PYTHONPATH=src python3 -m unittest discover -s tests -v
 PYTHONPATH=src python3 -m dependency_visualizer --config examples/maven.xml
 ```
 
-В PowerShell:
+В PowerShell, в том числе в терминале PyCharm:
+
+```powershell
+python -m src.dependency_visualizer --help
+python -m src.dependency_visualizer --config examples/maven.xml
+python -m src.dependency_visualizer --config examples/junit.xml
+python run_tests.py
+```
+
+Скрипт run_tests.py самостоятельно добавляет папку src в пути поиска
+модулей. При успешном выполнении выводятся `Ran 37 tests` и `OK`.
+
+Альтернативный запуск тестов в PowerShell:
 
 ```powershell
 $env:PYTHONPATH = "src"
-python -m dependency_visualizer --config examples/maven.xml
 python -m unittest discover -s tests -v
 ```
+
+На Linux или macOS:
+
+```sh
+PYTHONPATH=src python3 -m unittest discover -s tests -v
+```
+
+Автоматические тесты не требуют внешнего интернета:
+HTTP-запросы проверяются с помощью временного локального сервера.
+Для получения данных из Maven Central необходим доступ к интернету.
 
 ## Конфигурация
 
@@ -75,15 +106,31 @@ python -m unittest discover -s tests -v
 | `test_mode` | Только `true` или `false`, с учетом регистра. |
 | `version` | Явная версия: латинские буквы, цифры, `.`, `_`, `+`, `-`. |
 
+На этапе 2 для получения зависимостей используется `test_mode=false`.
+Программа формирует URL POM на основании имени пакета и версии,
+затем загружает его из репозитория, указанного в `repository`.
+
+При `test_mode=true` сохраняется проверка конфигурации и доступности
+тестового файла. Обработка содержимого тестового графа относится
+к этапу 3, поэтому на этапе 2 такой запуск завершается сообщением
+об отсутствии этой возможности и кодом `3`.
+
+Относительный путь к тестовому файлу отсчитывается от каталога XML.
+
+Диапазоны версий, активация Maven profiles и поиск timestamped SNAPSHOT
+через maven-metadata.xml пока не поддерживаются.
+
 ## Примеры использования
 
 ### Проверка конфигурации обычного репозитория
+
+В ветке `stage-1`:
 
 ```sh
 sh run.sh --config examples/maven.xml
 ```
 
-Текущий результат этапа 1:
+Результат этапа 1:
 
 ```text
 package=org.apache.commons:commons-lang3
@@ -92,7 +139,47 @@ test_mode=false
 version=3.14.0
 ```
 
+На этапе 2 вместо настроек выводятся прямые зависимости.
+
+Например, в файле `examples/junit.xml` указан пакет `junit:junit`
+версии `4.13.2`. Запуск в PowerShell:
+
+```powershell
+python -m src.dependency_visualizer --config examples/junit.xml
+```
+
+На Linux или macOS:
+
+```sh
+sh run.sh --config examples/junit.xml
+```
+
+Программа загружает POM по адресу:
+
+```text
+https://repo.maven.apache.org/maven2/junit/junit/4.13.2/junit-4.13.2.pom
+```
+
+Результат этапа 2:
+
+```text
+org.hamcrest:hamcrest-core:1.3 [scope=compile, type=jar]
+org.hamcrest:hamcrest-library:1.3 [scope=test, type=jar]
+```
+
+Каждая строка содержит имя и версию прямой зависимости,
+область использования `scope` и тип `type`.
+При наличии дополнительно выводятся `classifier` и `optional=true`.
+
+Если прямых зависимостей нет:
+
+```text
+Прямые зависимости не найдены.
+```
+
 ### Проверка конфигурации тестового репозитория
+
+В ветке `stage-1`:
 
 ```sh
 sh run.sh --config examples/test.xml
@@ -101,19 +188,32 @@ sh run.sh --config examples/test.xml
 Выводятся `package=A`, `test_mode=true`, `version=1.0`
 и полный путь к `examples/repository.txt`.
 
+На этапе 1 содержимое тестового файла не анализируется.
+На этапе 2 эта команда сообщает, что сбор зависимостей
+из тестового графа относится к этапу 3.
+
 Вывод настроек в формате ключ-значение предусмотрен заданием только
-для этапа 1. В следующих версиях этот раздел будет описывать актуальный
-результат запуска.
+для этапа 1. На этапе 2 вместо него выводятся прямые зависимости.
 
 ## Демонстрация ошибок всех параметров
 
-Каждую команду следует выполнять отдельно: ожидается код завершения `1`.
+Каждую команду следует выполнять отдельно:
+ожидается код завершения `1`.
 
 ```sh
 sh run.sh --config examples/invalid_package.xml
 sh run.sh --config examples/invalid_repository.xml
 sh run.sh --config examples/invalid_test_mode.xml
 sh run.sh --config examples/invalid_version.xml
+```
+
+В PowerShell:
+
+```powershell
+python -m src.dependency_visualizer --config examples/invalid_package.xml
+python -m src.dependency_visualizer --config examples/invalid_repository.xml
+python -m src.dependency_visualizer --config examples/invalid_test_mode.xml
+python -m src.dependency_visualizer --config examples/invalid_version.xml
 ```
 
 | Файл | Причина и фрагмент сообщения |
@@ -124,9 +224,34 @@ sh run.sh --config examples/invalid_version.xml
 | `invalid_version.xml` | `version: ожидается версия…` |
 
 Полное сообщение начинается с `Ошибка конфигурации:` и идет в stderr.
-При ошибке настройки в stdout не выводятся; показывается первая ошибка.
-Коды: `0` — успех или справка, `1` — ошибка конфигурации, `2` — ошибка
-аргументов командной строки (стандартное поведение argparse).
+Показывается первая обнаруженная ошибка.
 
+На этапе 2 дополнительно обрабатываются ошибки HTTP,
+таймауты и ошибки соединения, некорректный POM, неизвестные
+и циклические свойства, отсутствие версии зависимости и циклы parent/BOM.
 
+Например, для проверки отсутствующей версии укажите в копии XML:
 
+```xml
+<version>0.0.0-does-not-exist</version>
+```
+
+При запуске с этой конфигурацией ожидается сообщение,
+начинающееся с `Ошибка Maven: HTTP 404`, и код завершения `3`.
+
+При ошибке получения данных частичный список зависимостей не выводится.
+
+Коды завершения:
+
+| Код | Значение |
+| --- | --- |
+| `0` | Успех или справка |
+| `1` | Ошибка конфигурации |
+| `2` | Ошибка аргументов командной строки |
+| `3` | Ошибка получения или обработки Maven-данных |
+
+Посмотреть код последней команды в PowerShell:
+
+```powershell
+$LASTEXITCODE
+```

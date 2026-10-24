@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <package>junit:junit</package>
+    <repository>https://repo.maven.apache.org/maven2</repository>
+    <test_mode>false</test_mode>
+    <version>4.13.2</version>
+</configuration>
