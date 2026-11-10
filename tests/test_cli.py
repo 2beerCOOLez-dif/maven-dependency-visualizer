@@ -28,7 +28,7 @@ class CliTests(unittest.TestCase):
         )
 
     def test_success(self):
-        """Получить POM через HTTP и вывести прямую зависимость."""
+        """Получить POM через HTTP и вывести граф с листовой вершиной."""
         with LocalRepository() as repository:
             repository.put(Artifact("org.example", "demo", "1.0"), """
                 <dependencies><dependency>
@@ -37,22 +37,24 @@ class CliTests(unittest.TestCase):
                     <version>2.0</version>
                 </dependency></dependencies>
             """)
+            repository.put(Artifact("org.example", "library", "2.0"))
             result = self.invoke("--config", str(repository.config()))
         self.assertEqual(result.returncode, EXIT_SUCCESS)
         self.assertEqual(result.stderr, "")
         self.assertEqual(result.stdout.splitlines(), [
-            "org.example:library:2.0 [scope=compile, type=jar]",
+            "Корень: org.example:demo:1.0",
+            "org.example:demo:1.0 -> org.example:library:2.0",
+            "org.example:library:2.0 -> нет",
+            "Циклы не обнаружены.",
         ])
 
     def test_empty_dependencies(self):
-        """Сообщить об отсутствии зависимостей без ошибки."""
+        """Сохранить корень без зависимостей как отдельную вершину."""
         with LocalRepository() as repository:
             repository.put(Artifact("org.example", "demo", "1.0"))
             result = self.invoke("--config", str(repository.config()))
         self.assertEqual(result.returncode, EXIT_SUCCESS)
-        self.assertEqual(
-            result.stdout.strip(), "Прямые зависимости не найдены."
-        )
+        self.assertIn("org.example:demo:1.0 -> нет", result.stdout)
 
     def test_repository_error(self):
         """Обработать HTTP 404 без traceback и частичного вывода."""
@@ -64,10 +66,33 @@ class CliTests(unittest.TestCase):
         self.assertNotIn("Traceback", result.stderr)
 
     def test_test_mode(self):
-        """Явно сообщить, что работа с тестовым графом относится к этапу 3."""
+        """Вывести тестовый граф с общей транзитивной зависимостью."""
         result = self.invoke("--config", str(PROJECT / "examples/test.xml"))
+        self.assertEqual(result.returncode, EXIT_SUCCESS)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.stdout.splitlines(), [
+            "Корень: A", "A -> B, C", "B -> C", "C -> нет",
+            "Циклы не обнаружены.",
+        ])
+
+    def test_cycle(self):
+        """Завершить обход цикла успешно и показать замкнутый путь."""
+        result = self.invoke(
+            "--config", str(PROJECT / "examples/test_cycle.xml")
+        )
+        self.assertEqual(result.returncode, EXIT_SUCCESS)
+        self.assertIn("Цикл: A -> B -> C -> A", result.stdout)
+        self.assertEqual(result.stderr, "")
+
+    def test_graph_error(self):
+        """Отказать неполному тестовому графу без частичного вывода."""
+        result = self.invoke(
+            "--config", str(PROJECT / "examples/test_invalid.xml")
+        )
         self.assertEqual(result.returncode, EXIT_MAVEN_ERROR)
-        self.assertIn("этапу 3", result.stderr)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Ошибка графа: Не описаны пакеты: B", result.stderr)
+        self.assertNotIn("Traceback", result.stderr)
 
     def test_config_error(self):
         """Сообщить об ошибке в stderr без traceback и частичного вывода."""

@@ -1,12 +1,14 @@
-"""Командный интерфейс получения прямых зависимостей Maven."""
+"""Командный интерфейс построения графа зависимостей."""
 
 import argparse
 import sys
 from pathlib import Path
 
 from .config import ConfigError, load_config
-from .maven import MavenRepository
+from .graph import format_graph
 from .models import MavenError
+from .operations import collect_graph
+from .test_repository import GraphError
 
 EXIT_SUCCESS = 0
 EXIT_CONFIG_ERROR = 1
@@ -16,7 +18,7 @@ EXIT_MAVEN_ERROR = 3
 def create_parser() -> argparse.ArgumentParser:
     """Создать интерфейс выбора единственного источника настроек — XML."""
     parser = argparse.ArgumentParser(
-        description="Вариант 25. Этап 2: прямые зависимости Maven-пакета."
+        description="Вариант 25. Этап 3: граф зависимостей и циклы, DFS."
     )
     parser.add_argument(
         "--config", required=True, type=Path, metavar="FILE.xml",
@@ -26,7 +28,7 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> int:
-    """Вывести прямые зависимости или сообщение об ошибке."""
+    """Вывести полный граф либо ошибку без частичного результата."""
     arguments = create_parser().parse_args(argv)
     try:
         config = load_config(arguments.config)
@@ -34,18 +36,13 @@ def main(argv: list[str] | None = None) -> int:
         print(f"Ошибка конфигурации: {error}", file=sys.stderr)
         return EXIT_CONFIG_ERROR
     try:
-        if config.test_mode:
-            raise MavenError(
-                "Сбор зависимостей из тестового графа относится к этапу 3."
-            )
-        dependencies = MavenRepository(config.repository).direct_dependencies(
-            config.package, config.version
-        )
+        graph = collect_graph(config)
+    except GraphError as error:
+        print(f"Ошибка графа: {error}", file=sys.stderr)
+        return EXIT_MAVEN_ERROR
     except MavenError as error:
         print(f"Ошибка Maven: {error}", file=sys.stderr)
         return EXIT_MAVEN_ERROR
-    if not dependencies:
-        print("Прямые зависимости не найдены.")
-    for dependency in dependencies:
-        print(dependency)
+    for line in format_graph(graph):
+        print(line)
     return EXIT_SUCCESS
