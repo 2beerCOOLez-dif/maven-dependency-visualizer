@@ -5,6 +5,8 @@ import unittest
 from dependency_visualizer.config import load_config
 from dependency_visualizer.models import Artifact, MavenError
 from dependency_visualizer.operations import collect_graph
+from dependency_visualizer.operations import collect_reverse_dependencies
+from dependency_visualizer.test_repository import GraphError
 from http_repository import LocalRepository
 
 
@@ -69,3 +71,43 @@ class OperationsTests(unittest.TestCase):
             config = load_config(repository.config("org.example:a"))
             with self.assertRaisesRegex(MavenError, "HTTP 404"):
                 collect_graph(config)
+
+    def test_reverse_maven_scope(self):
+        """Найти потребителей в графе корня, не обходя весь HTTP-репозиторий."""
+        with LocalRepository() as repository:
+            put_package(repository, "a", dependency("b"))
+            put_package(repository, "b", dependency("c"))
+            put_package(repository, "c")
+            put_package(repository, "outside", dependency("c"))
+            config = load_config(repository.config("org.example:a"))
+            result = collect_reverse_dependencies(config, "org.example:c:1.0")
+            requests = repository.server.requests
+        self.assertEqual(result, ("org.example:a:1.0", "org.example:b:1.0"))
+        self.assertFalse(any("outside" in request for request in requests))
+
+    def test_reverse_distinct_versions_and_missing(self):
+        """Различить версии целевого пакета и ошибку отсутствующей версии."""
+        with LocalRepository() as repository:
+            put_package(repository, "a", dependency("b") + dependency("c"))
+            put_package(repository, "b", dependency("c", "2.0"))
+            put_package(repository, "c")
+            repository.put(Artifact("org.example", "c", "2.0"))
+            config = load_config(repository.config("org.example:a"))
+            self.assertEqual(
+                collect_reverse_dependencies(config, "org.example:c:1.0"),
+                ("org.example:a:1.0",),
+            )
+            self.assertEqual(
+                collect_reverse_dependencies(config, "org.example:c:2.0"),
+                ("org.example:a:1.0", "org.example:b:1.0"),
+            )
+            with self.assertRaisesRegex(GraphError, "отсутствует"):
+                collect_reverse_dependencies(config, "org.example:c:3.0")
+
+    def test_reverse_transitive_failure(self):
+        """Прервать обратный поиск при ошибке получения исходного графа."""
+        with LocalRepository() as repository:
+            put_package(repository, "a", dependency("missing"))
+            config = load_config(repository.config("org.example:a"))
+            with self.assertRaisesRegex(MavenError, "HTTP 404"):
+                collect_reverse_dependencies(config, "org.example:a:1.0")

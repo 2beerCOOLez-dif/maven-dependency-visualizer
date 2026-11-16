@@ -14,23 +14,24 @@
 | 1 | CLI, XML-конфигурация, проверка параметров, вывод ключ-значение | Реализован |
 | 2 | Получение и вывод прямых зависимостей заданной версии Maven-пакета | Реализован |
 | 3 | Граф транзитивных зависимостей, итеративный DFS, циклы, тестовый режим | Реализован |
-| 4 | Вывод обратных зависимостей | Запланирован |
+| 4 | Вывод обратных зависимостей | Реализован |
 | 5 | Graphviz, изображение графа, примеры и сравнение результатов | Запланирован |
 
-На этапе 3 строится ориентированный граф всех достижимых зависимостей.
-DFS использует стек без рекурсии: сначала полностью обходится одна ветвь,
-затем следующая. Каждая вершина раскрывается один раз; общие зависимости
-сохраняют все входящие ребра. Корень и листья включаются в граф.
-Ребро к вершине текущего пути означает цикл: программа сохраняет его,
-показывает замкнутый путь и продолжает обход остальных ветвей.
-Выводятся циклы по обратным ребрам DFS, а не все возможные простые циклы.
+Граф строится итеративным DFS без рекурсии. Общие вершины раскрываются
+один раз; циклы сохраняются, обход остальных ветвей продолжается.
+На этапе 4 добавлен режим `--reverse PACKAGE`: ребра разворачиваются,
+а прежний DFS находит прямых и косвенных потребителей выбранного пакета.
+Ответ отсортирован, повторов нет; сам пакет исключается даже в цикле.
 
-В Maven-режиме вершина — `groupId:artifactId:version`.
-Учитываются свойства `${...}`, родительские POM, dependencyManagement
-и импортированные BOM; зависимости плагинов не включаются.
-Обходятся объявления всех scope, включая test и optional.
-Это граф объявлений POM: фильтрация scope, exclusions и разрешение
-конфликтов версий как в Maven не выполняются. Разные версии — разные вершины.
+В тестовом режиме обратный поиск охватывает весь файл репозитория,
+включая компоненты вне пути от корня XML. В Maven-режиме область поиска —
+граф, достижимый от package/version из XML. POM описывает исходящие связи,
+поэтому поиск всех потребителей во всем Maven Central не выполняется.
+Цель в Maven задается точно: `groupId:artifactId:version`.
+
+Учитываются свойства, parent, dependencyManagement и BOM. Обходятся
+объявления всех scope, включая test и optional. Exclusions и разрешение
+конфликтов версий как в Maven не выполняются; разные версии — разные вершины.
 Визуализация изображения относится к этапу 5.
 
 ## Запуск и тесты
@@ -41,57 +42,45 @@ DFS использует стек без рекурсии: сначала пол
 На Linux или macOS:
 
 ```sh
-sh run.sh --help
-sh run.sh --config examples/test.xml
-sh run.sh --config examples/junit.xml
+sh run.sh --config examples/test_reverse.xml --reverse D
 python3 run_tests.py
 ```
 
-В PowerShell, в том числе в терминале PyCharm:
+В PowerShell / PyCharm:
 
 ```powershell
-python -m src.dependency_visualizer --help
-python -m src.dependency_visualizer --config examples/test.xml
-python -m src.dependency_visualizer --config examples/junit.xml
+python -m src.dependency_visualizer --config examples/test_reverse.xml --reverse D
 python run_tests.py
 ```
 
 `run_tests.py` самостоятельно добавляет src в пути импорта.
-Успешный результат: `Ran 54 tests` и `OK`.
-Проверяются транзитивность, порядок DFS, общие вершины, циклы,
-самозависимость, недостижимые вершины и цепочка из 1501 вершины.
+Успешный результат: `Ran 69 tests` и `OK`.
 Maven-тесты используют локальный HTTP-сервер и не требуют интернета.
 
-Альтернативный запуск тестов в PowerShell:
+Для Maven необходим интернет; тестовый режим полностью локальный.
+Проверка оформления в PowerShell (утилиты нужны только разработчику):
 
 ```powershell
-$env:PYTHONPATH = "src"
-python -m unittest discover -s tests -v
+python -m pip install pycodestyle radon
+python -m pycodestyle --max-line-length=80 src tests run_tests.py check_style.py
+$env:RADONFILESENCODING = "UTF-8"
+python -m radon cc -s --min C src tests run_tests.py check_style.py
+python check_style.py
 ```
 
-На Linux или macOS:
-
-```sh
-PYTHONPATH=src python3 -m unittest discover -s tests -v
-```
-
-Для обычного Maven-репозитория необходим доступ к интернету.
-Тестовый режим работает полностью локально.
+Первые две проверки кода при отсутствии замечаний ничего не выводят.
+Radon показывает C–F при сложности выше 10. check_style.py проверяет
+80 символов в строке, 1000 строк в файле, 40 строк в функции, 7 параметров,
+docstring, отсутствие комментариев и числовых литералов в сравнениях.
+Код 0 означает успех дополнительных проверок, 1 — нарушения.
 
 ## Конфигурация
 
 Единственный источник четырех пользовательских параметров — XML-файл.
-Обязательный аргумент `--config` выбирает файл настроек.
+Аргумент `--config` выбирает настройки. Опция `--reverse PACKAGE` выбирает
+операцию и ее цель, не переопределяя четыре параметра XML.
 
-```xml
-<?xml version="1.0" encoding="UTF-8"?>
-<configuration>
-    <package>A</package>
-    <repository>repository.txt</repository>
-    <test_mode>true</test_mode>
-    <version>1.0</version>
-</configuration>
-```
+Пример XML: `examples/test_reverse.xml`.
 
 | Параметр | Правила |
 | --- | --- |
@@ -112,14 +101,13 @@ B: C
 C:
 ```
 
-Здесь A зависит от B и C, а B — от C. Лист описывается строкой `C:`.
-Все упомянутые пакеты должны иметь собственную строку; повтор определения
-пакета запрещен. Пустые строки разрешены, повтор одного ребра удаляется.
-Корень package должен присутствовать в файле. Недостижимые вершины
-проверяются при чтении, но в результирующий граф не включаются.
+Каждый упомянутый пакет должен иметь собственную строку; лист — `C:`.
+Повтор определения запрещен. Пустые строки разрешены, повторы ребер удаляются.
+При обычном обходе включаются только достижимые от package вершины.
+При обратном поиске анализируется весь тестовый файл; цель должна
+присутствовать в нем. Некорректное описание отклоняется целиком.
 
-При test_mode=false задаются Maven-координаты, URL и точная версия,
-как в готовых examples/maven.xml и examples/junit.xml.
+Maven-настройки показаны в examples/maven.xml и examples/junit.xml.
 Диапазоны версий, активация profiles и поиск timestamped SNAPSHOT
 через maven-metadata.xml пока не поддерживаются.
 
@@ -127,59 +115,57 @@ C:
 
 ### Проверка конфигурации обычного репозитория
 
-В stage-1 выводятся настройки, в stage-2 — прямые зависимости,
-а в stage-3 — список смежности полного достижимого графа и циклы.
-Для Maven выполните:
+Обычный вывод графа сохраняется. Пример обратного поиска в PowerShell:
 
 ```powershell
-python -m src.dependency_visualizer --config examples/junit.xml
+python -m src.dependency_visualizer --config examples/junit.xml --reverse org.hamcrest:hamcrest-core:1.3
 ```
 
-Программа начинает с POM junit:junit версии 4.13.2, затем получает
-POM его зависимостей и продолжает обход до листьев или уже посещенных
-вершин. Ошибка загрузки любой вершины завершает операцию без вывода
-частичного графа.
+Сначала строится граф junit:junit:4.13.2, затем в нем ищутся потребители
+указанной версии hamcrest-core. В ответ включаются прямые и косвенные
+потребители. Ошибка загрузки любого POM завершает операцию без части ответа.
 
 ### Проверка конфигурации тестового репозитория
 
+Обычный граф: `python -m src.dependency_visualizer --config examples/test.xml`.
+
+Демонстрация обратных зависимостей:
+
 ```powershell
-python -m src.dependency_visualizer --config examples/test.xml
+python -m src.dependency_visualizer --config examples/test_chain.xml --reverse C
+python -m src.dependency_visualizer --config examples/test_diamond.xml --reverse D
+python -m src.dependency_visualizer --config examples/test_cycle.xml --reverse A
+python -m src.dependency_visualizer --config examples/test_self.xml --reverse A
+python -m src.dependency_visualizer --config examples/test_reverse.xml --reverse D
+python -m src.dependency_visualizer --config examples/test_reverse.xml --reverse A
 ```
 
-Результат:
+| Файл и цель | Обратные зависимости |
+| --- | --- |
+| test_chain.xml, C | A, B — косвенный и прямой потребители |
+| test_diamond.xml, D | A, B, C — без повторов общей вершины |
+| test_cycle.xml, A | B, C — цикл завершается |
+| test_self.xml, A | Нет — сам целевой пакет исключается |
+| test_reverse.xml, D | A, B, C, E — E находится вне прямого графа корня A |
+| test_reverse.xml, A | Нет — от корня никто не зависит |
+
+В graph_reverse.txt описаны A → B/C → D, E → D, G → F.
+Для цели D вывод будет таким:
 
 ```text
-Корень: A
-A -> B, C
-B -> C
-C -> нет
-Циклы не обнаружены.
+Обратные зависимости для D:
+A
+B
+C
+E
 ```
 
-Различные случаи запускаются отдельными командами:
-
-```powershell
-python -m src.dependency_visualizer --config examples/test_chain.xml
-python -m src.dependency_visualizer --config examples/test_diamond.xml
-python -m src.dependency_visualizer --config examples/test_cycle.xml
-python -m src.dependency_visualizer --config examples/test_self.xml
-python -m src.dependency_visualizer --config examples/test_isolated.xml
-```
-
-| Файл | Результат |
-| --- | --- |
-| test_chain.xml | A → B → C, циклов нет |
-| test_diamond.xml | A → B/C → D; D общая, циклов нет |
-| test_cycle.xml | Цикл A → B → C → A; лист D также обходится |
-| test_self.xml | Цикл A → A |
-| test_isolated.xml | Только A; недостижимая Z с петлей не включается |
-
-Для Linux/macOS используйте `sh run.sh --config examples/ИМЯ.xml`.
-Цикл является допустимым содержимым графа и дает код завершения 0.
+Для Linux/macOS используйте `sh run.sh --config examples/ИМЯ.xml --reverse D`.
+Без --reverse выводится прежний граф. Пустой ответ и циклы дают код 0.
 
 ## Демонстрация ошибок всех параметров
 
-Каждую команду выполняйте отдельно; ожидается код завершения 1:
+Примеры неверных настроек, ожидается код 1:
 
 ```powershell
 python -m src.dependency_visualizer --config examples/invalid_package.xml
@@ -188,33 +174,22 @@ python -m src.dependency_visualizer --config examples/invalid_test_mode.xml
 python -m src.dependency_visualizer --config examples/invalid_version.xml
 ```
 
-| Файл | Причина |
-| --- | --- |
-| invalid_package.xml | Некорректные координаты пакета |
-| invalid_repository.xml | Некорректный URL репозитория |
-| invalid_test_mode.xml | Значение отличается от true/false |
-| invalid_version.xml | Недопустимый формат версии |
-
-Ошибка неполного графа, код 3:
+Файлы проверяют соответственно координаты, URL, true/false и формат версии.
+Ошибка неполного графа и неизвестная цель дают код 3:
 
 ```powershell
 python -m src.dependency_visualizer --config examples/test_invalid.xml
+python -m src.dependency_visualizer --config examples/test_reverse.xml --reverse Z
 ```
 
-```text
-Ошибка графа: Не описаны пакеты: B. Добавьте строки NAME:.
-```
-
-Обрабатываются ошибки UTF-8 и формата графа, отсутствие корня, HTTP,
-соединения, POM, неизвестные/циклические свойства и циклы parent/BOM.
-Для проверки HTTP 404 укажите в копии Maven XML отсутствующую версию.
-Ошибки идут в stderr; частичный граф не выводится.
+Ошибки конфигурации, графа, UTF-8, HTTP, POM и parent/BOM идут в stderr.
+Частичный результат не выводится. Отсутствие потребителей — успешный ответ.
 
 | Код | Значение |
 | --- | --- |
-| 0 | Успех или справка, включая граф с циклом |
+| 0 | Успех или справка, включая циклы и пустой ответ |
 | 1 | Ошибка конфигурации |
-| 2 | Ошибка аргументов командной строки |
-| 3 | Ошибка получения или обработки Maven-данных либо тестового графа |
+| 2 | Ошибка аргументов CLI |
+| 3 | Ошибка получения данных, графа или неизвестная цель |
 
 Код последней команды в PowerShell: `$LASTEXITCODE`.

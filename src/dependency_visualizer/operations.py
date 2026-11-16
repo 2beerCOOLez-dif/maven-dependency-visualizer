@@ -5,6 +5,7 @@ from pathlib import Path
 from .config import Config
 from .graph import DependencyGraph, build_graph
 from .maven import MavenRepository
+from .reverse import find_reverse_dependencies
 from .test_repository import FileRepository
 
 
@@ -24,3 +25,15 @@ def collect_graph(config: Config) -> DependencyGraph:
         ]
 
     return build_graph(f"{config.package}:{config.version}", neighbors)
+
+
+def collect_reverse_dependencies(
+    config: Config, target: str,
+) -> tuple[str, ...]:
+    """Искать во всем тестовом файле либо в построенном Maven-графе."""
+    if config.test_mode:
+        repository = FileRepository(Path(config.repository))
+        adjacency = repository.adjacency
+    else:
+        adjacency = collect_graph(config).adjacency
+    return find_reverse_dependencies(adjacency, target)

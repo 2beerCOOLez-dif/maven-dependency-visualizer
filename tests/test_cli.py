@@ -94,6 +94,69 @@ class CliTests(unittest.TestCase):
         self.assertIn("Ошибка графа: Не описаны пакеты: B", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
 
+    def test_reverse_examples(self):
+        """Проверить цепь, ромб, циклы, отсутствие и отдельные компоненты."""
+        cases = (
+            ("test_chain.xml", "C", ("A", "B")),
+            ("test_diamond.xml", "D", ("A", "B", "C")),
+            ("test_cycle.xml", "A", ("B", "C")),
+            ("test_self.xml", "A", ()),
+            ("test_isolated.xml", "A", ()),
+            ("test_reverse.xml", "D", ("A", "B", "C", "E")),
+            ("test_reverse.xml", "F", ("G",)),
+            ("test_reverse.xml", "A", ()),
+        )
+        for filename, target, expected in cases:
+            with self.subTest(filename=filename, target=target):
+                result = self.invoke(
+                    "--config", str(PROJECT / "examples" / filename),
+                    "--reverse", target,
+                )
+                self.assertEqual(result.returncode, EXIT_SUCCESS)
+                self.assertEqual(result.stderr, "")
+                lines = [f"Обратные зависимости для {target}:"]
+                lines.extend(expected or ("Обратные зависимости не найдены.",))
+                self.assertEqual(result.stdout.splitlines(), lines)
+
+    def test_reverse_errors(self):
+        """Отклонить неизвестный пакет и неполный файл без части вывода."""
+        cases = (
+            ("test_reverse.xml", "Z", "Z отсутствует"),
+            ("test_invalid.xml", "A", "Не описаны пакеты: B"),
+        )
+        for filename, target, message in cases:
+            with self.subTest(filename=filename):
+                result = self.invoke(
+                    "--config", str(PROJECT / "examples" / filename),
+                    "--reverse", target,
+                )
+                self.assertEqual(result.returncode, EXIT_MAVEN_ERROR)
+                self.assertEqual(result.stdout, "")
+                self.assertIn(message, result.stderr)
+                self.assertNotIn("Traceback", result.stderr)
+
+    def test_reverse_http(self):
+        """Вывести обратную Maven-зависимость с полной версией пакета."""
+        with LocalRepository() as repository:
+            repository.put(Artifact("org.example", "demo", "1.0"), """
+                <dependencies><dependency>
+                    <groupId>org.example</groupId>
+                    <artifactId>library</artifactId>
+                    <version>2.0</version>
+                </dependency></dependencies>
+            """)
+            repository.put(Artifact("org.example", "library", "2.0"))
+            result = self.invoke(
+                "--config", str(repository.config()),
+                "--reverse", "org.example:library:2.0",
+            )
+        self.assertEqual(result.returncode, EXIT_SUCCESS)
+        self.assertEqual(result.stderr, "")
+        self.assertEqual(result.stdout.splitlines(), [
+            "Обратные зависимости для org.example:library:2.0:",
+            "org.example:demo:1.0",
+        ])
+
     def test_config_error(self):
         """Сообщить об ошибке в stderr без traceback и частичного вывода."""
         result = self.invoke("--config", str(PROJECT / "missing.xml"))
@@ -108,4 +171,9 @@ class CliTests(unittest.TestCase):
         self.assertEqual(self.invoke().returncode, EXIT_ARGUMENT_ERROR)
         self.assertEqual(
             self.invoke("--unknown").returncode, EXIT_ARGUMENT_ERROR
+        )
+        self.assertEqual(
+            self.invoke(
+                "--config", str(PROJECT / "examples/test.xml"), "--reverse"
+            ).returncode, EXIT_ARGUMENT_ERROR
         )
