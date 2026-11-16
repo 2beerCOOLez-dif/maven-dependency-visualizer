@@ -1,0 +1,7 @@
+Apache Maven 3.9.11; Maven Dependency Plugin 3.8.1; JDK 21
+Command: mvn -B -f pom.xml org.apache.maven.plugins:maven-dependency-plugin:3.8.1:tree -DoutputType=dot -DoutputFile=maven.dot
+
+[INFO] --- dependency:3.8.1:tree (default-cli) @ comparison-junit ---
+[INFO] Wrote dependency tree to: <project>/examples/comparison/junit/maven.dot
+[INFO] BUILD SUCCESS
+[INFO] Total time:  19.875 s

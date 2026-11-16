@@ -1,8 +1,10 @@
 """Интеграционные проверки запуска CLI в отдельном процессе."""
 
 import os
+import shutil
 import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -164,6 +166,46 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.stdout, "")
         self.assertIn("Ошибка конфигурации", result.stderr)
         self.assertNotIn("Traceback", result.stderr)
+
+    @unittest.skipUnless(shutil.which("dot"), "Graphviz не установлен")
+    def test_visualization(self):
+        """Сохранить настоящий DOT и SVG через CLI без открытия браузера."""
+        with tempfile.TemporaryDirectory() as directory:
+            prefix = Path(directory) / "result"
+            result = self.invoke(
+                "--config", str(PROJECT / "examples/test_cycle.xml"),
+                "--visualize", "--output", str(prefix), "--no-open",
+            )
+            self.assertTrue(prefix.with_suffix(".dot").is_file())
+            self.assertIn("<svg", prefix.with_suffix(".svg").read_text())
+        self.assertEqual(result.returncode, EXIT_SUCCESS)
+        self.assertEqual(result.stderr, "")
+        self.assertIn("Graphviz:", result.stdout)
+        self.assertIn("Изображение:", result.stdout)
+
+    def test_visualization_arguments(self):
+        """Отклонить смешивание операций и параметры без --visualize."""
+        cases = (
+            ("--visualize", "--reverse", "A"),
+            ("--output", "output/test"),
+            ("--no-open",),
+        )
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                result = self.invoke(
+                    "--config", str(PROJECT / "examples/test.xml"), *arguments,
+                )
+                self.assertEqual(result.returncode, EXIT_ARGUMENT_ERROR)
+
+    def test_visualization_graph_error(self):
+        """Не создавать изображение и частичный вывод для плохого графа."""
+        result = self.invoke(
+            "--config", str(PROJECT / "examples/test_invalid.xml"),
+            "--visualize", "--no-open",
+        )
+        self.assertEqual(result.returncode, EXIT_MAVEN_ERROR)
+        self.assertEqual(result.stdout, "")
+        self.assertIn("Не описаны пакеты", result.stderr)
 
     def test_help_and_arguments(self):
         """Показать справку и отклонить отсутствие обязательного пути."""

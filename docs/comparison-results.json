@@ -1,0 +1,74 @@
+[
+  {
+    "package": "junit:junit:4.13.2",
+    "name": "junit",
+    "ours_nodes": 3,
+    "ours_edges": 3,
+    "maven_nodes": 2,
+    "maven_edges": 1,
+    "only_ours": [
+      "org.hamcrest:hamcrest-library:1.3"
+    ],
+    "only_maven": [],
+    "only_ours_edges": [
+      [
+        "junit:junit:4.13.2",
+        "org.hamcrest:hamcrest-library:1.3"
+      ],
+      [
+        "org.hamcrest:hamcrest-library:1.3",
+        "org.hamcrest:hamcrest-core:1.3"
+      ]
+    ],
+    "only_maven_edges": []
+  },
+  {
+    "package": "org.hamcrest:hamcrest-library:1.3",
+    "name": "hamcrest",
+    "ours_nodes": 2,
+    "ours_edges": 1,
+    "maven_nodes": 2,
+    "maven_edges": 1,
+    "only_ours": [],
+    "only_maven": [],
+    "only_ours_edges": [],
+    "only_maven_edges": []
+  },
+  {
+    "package": "org.slf4j:slf4j-simple:1.7.36",
+    "name": "slf4j",
+    "ours_nodes": 5,
+    "ours_edges": 6,
+    "maven_nodes": 2,
+    "maven_edges": 1,
+    "only_ours": [
+      "junit:junit:4.13",
+      "org.hamcrest:hamcrest-core:1.3",
+      "org.hamcrest:hamcrest-library:1.3"
+    ],
+    "only_maven": [],
+    "only_ours_edges": [
+      [
+        "junit:junit:4.13",
+        "org.hamcrest:hamcrest-core:1.3"
+      ],
+      [
+        "junit:junit:4.13",
+        "org.hamcrest:hamcrest-library:1.3"
+      ],
+      [
+        "org.hamcrest:hamcrest-library:1.3",
+        "org.hamcrest:hamcrest-core:1.3"
+      ],
+      [
+        "org.slf4j:slf4j-api:1.7.36",
+        "junit:junit:4.13"
+      ],
+      [
+        "org.slf4j:slf4j-simple:1.7.36",
+        "junit:junit:4.13"
+      ]
+    ],
+    "only_maven_edges": []
+  }
+]

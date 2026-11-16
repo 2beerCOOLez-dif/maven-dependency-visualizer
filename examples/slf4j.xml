@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+    <package>org.slf4j:slf4j-simple</package>
+    <repository>https://repo.maven.apache.org/maven2</repository>
+    <test_mode>false</test_mode>
+    <version>1.7.36</version>
+</configuration>

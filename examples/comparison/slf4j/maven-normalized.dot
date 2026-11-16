@@ -1,0 +1,9 @@
+digraph dependencies {
+  graph [rankdir=TB, bgcolor="white", pad="0.3"];
+  node [shape=box, style="rounded,filled", fontname="Arial",
+        fontsize=11, fillcolor="#f8fafc", color="#475569"];
+  edge [color="#475569"];
+  n0 [label="org.slf4j:slf4j-simple:1.7.36", fillcolor="#dbeafe"];
+  n1 [label="org.slf4j:slf4j-api:1.7.36"];
+  n0 -> n1;
+}

@@ -1,0 +1,4 @@
+digraph "org.example:comparison-slf4j:pom:1.0" {
+	"org.example:comparison-slf4j:pom:1.0" -> "org.slf4j:slf4j-simple:jar:1.7.36:compile" ;
+	"org.slf4j:slf4j-simple:jar:1.7.36:compile" -> "org.slf4j:slf4j-api:jar:1.7.36:compile" ;
+ }
